@@ -79,7 +79,7 @@ app.get('/metadata', async (req, res) => {
             listeners: source.listeners || 0,
             bitrate: source.bitrate || "No disponible",
             genre: source.genre || "No disponible",
-            listen_url: source.listenurl || "No disponible"
+            listen_url: "https://estructuraweb.com.co:9309/live"
         });
     } catch (error) {
         res.status(500).json({ error: 'Error al obtener metadatos', details: error.message });
