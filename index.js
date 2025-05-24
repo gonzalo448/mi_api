@@ -32,29 +32,58 @@ const extractArtistAndTitle = (fullTitle) => {
     return { artist: "Desconocido", song: fullTitle };
 };
 
-// Ruta para obtener metadatos de la transmisión, incluyendo la carátula desde CentovaCast
+// Función para obtener el MBID del álbum desde MusicBrainz
+const getMBIDFromMusicBrainz = async (artistName, songTitle) => {
+    try {
+        const queryUrl = `https://musicbrainz.org/ws/2/release-group/?query=artist:${encodeURIComponent(artistName)} AND release:${encodeURIComponent(songTitle)}&fmt=json`;
+        const response = await axios.get(queryUrl);
+
+        if (response.data["release-groups"] && response.data["release-groups"].length > 0) {
+            return response.data["release-groups"][0].id; // Devuelve el MBID del primer resultado
+        }
+
+        return null;
+    } catch (error) {
+        console.error("Error obteniendo MBID desde MusicBrainz:", error.message);
+        return null;
+    }
+};
+
+// Función para obtener la carátula del álbum desde Cover Art Archive
+const getAlbumArtFromCoverArtArchive = async (mbid) => {
+    if (!mbid) return "No disponible";
+    return `https://coverartarchive.org/release-group/${mbid}/front`;
+};
+
+// Ruta para obtener metadatos de la transmisión
 app.get('/metadata', async (req, res) => {
     try {
-        const response = await axios.get('https://estructuraweb.com.co:2199/rpc/ritmo/streaminfo.get');
+        const response = await axios.get('https://estructuraweb.com.co:9309/status-json.xsl');
 
-        if (!response.data.data) {
+        if (!response.data.icestats || !response.data.icestats.source) {
             return res.status(500).json({ error: 'No se encontraron metadatos válidos' });
         }
 
-        const songData = response.data.data.song;
-        const playlistData = response.data.data.playlist;
+        const source = Array.isArray(response.data.icestats.source) ? response.data.icestats.source[0] : response.data.icestats.source;
 
-        // Extraer artista, título y carátula
-        const artist = songData.artist || "Desconocido";
-        const songTitle = songData.title || "No disponible";
-        const albumArt = playlistData.imageurl || "No disponible"; // Obteniendo la carátula desde CentovaCast
+        const { artist, song } = extractArtistAndTitle(source.title);
+
+        // Obtener el MBID del álbum desde MusicBrainz
+        const mbid = await getMBIDFromMusicBrainz(artist, song);
+
+        // Obtener la carátula desde Cover Art Archive usando el MBID
+        const album_art = await getAlbumArtFromCoverArtArchive(mbid);
 
         res.json({
-            server_name: response.data.data.title || "No disponible",
+            server_name: source.server_name || "No disponible",
+            server_description: source.server_description || "No disponible",
+            current_song: song,
             artist: artist,
-            current_song: songTitle,
-            album: songData.album || "No disponible",
-            album_art: albumArt,
+            album: mbid ? song : "No disponible",
+            album_art: album_art,
+            listeners: source.listeners || 0,
+            bitrate: source.bitrate || "No disponible",
+            genre: source.genre || "No disponible",
             listen_url: "https://estructuraweb.com.co:9309/live"
         });
     } catch (error) {
