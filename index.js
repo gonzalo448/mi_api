@@ -17,13 +17,20 @@ app.get('/radio', (req, res) => {
     });
 });
 
-// Función para separar el artista y el título de la canción
+// Función mejorada para separar el artista y el título de la canción
 const extractArtistAndTitle = (fullTitle) => {
-    const splitTitle = fullTitle.split(" - "); // Divide por " - "
-    return {
-        artist: splitTitle[0] || "Desconocido",
-        song: splitTitle[1] || fullTitle
-    };
+    if (!fullTitle) return { artist: "Desconocido", song: "No disponible" };
+
+    const splitTitle = fullTitle.split(" - ");
+
+    if (splitTitle.length >= 2) {
+        return {
+            artist: splitTitle[0].trim(),
+            song: splitTitle.slice(1).join(" - ").trim() // Se asegura de que el título solo incluya la canción
+        };
+    }
+
+    return { artist: "Desconocido", song: fullTitle };
 };
 
 // Función para obtener el MBID del álbum desde MusicBrainz
@@ -46,8 +53,7 @@ const getMBIDFromMusicBrainz = async (artistName, songTitle) => {
 // Función para obtener la carátula del álbum desde Cover Art Archive
 const getAlbumArtFromCoverArtArchive = async (mbid) => {
     if (!mbid) return "No disponible";
-
-    return `https://coverartarchive.org/release-group/${mbid}/front`; // URL directa de la imagen
+    return `https://coverartarchive.org/release-group/${mbid}/front`;
 };
 
 // Ruta para obtener metadatos de la transmisión
@@ -61,6 +67,7 @@ app.get('/metadata', async (req, res) => {
 
         const source = Array.isArray(response.data.icestats.source) ? response.data.icestats.source[0] : response.data.icestats.source;
 
+        // Extraer correctamente el artista y el título
         const { artist, song } = extractArtistAndTitle(source.title);
 
         // Obtener el MBID del álbum desde MusicBrainz
@@ -72,9 +79,9 @@ app.get('/metadata', async (req, res) => {
         res.json({
             server_name: source.server_name || "No disponible",
             server_description: source.server_description || "No disponible",
-            current_song: source.title || "No disponible",
+            current_song: song, // Ahora solo muestra el título sin el artista
             artist: artist,
-            album: mbid ? song : "No disponible", // Si encontramos un MBID, usamos el nombre de la canción como álbum
+            album: mbid ? song : "No disponible",
             album_art: album_art,
             listeners: source.listeners || 0,
             bitrate: source.bitrate || "No disponible",
