@@ -17,75 +17,44 @@ app.get('/radio', (req, res) => {
     });
 });
 
-// Función mejorada para separar el artista y el título de la canción
+// Función para separar el artista y el título de la canción
 const extractArtistAndTitle = (fullTitle) => {
     if (!fullTitle) return { artist: "Desconocido", song: "No disponible" };
 
     const splitTitle = fullTitle.split(" - ");
-
     if (splitTitle.length >= 2) {
         return {
             artist: splitTitle[0].trim(),
-            song: splitTitle.slice(1).join(" - ").trim() // Se asegura de que el título solo incluya la canción
+            song: splitTitle.slice(1).join(" - ").trim()
         };
     }
 
     return { artist: "Desconocido", song: fullTitle };
 };
 
-// Función para obtener el MBID del álbum desde MusicBrainz
-const getMBIDFromMusicBrainz = async (artistName, songTitle) => {
-    try {
-        const queryUrl = `https://musicbrainz.org/ws/2/release-group/?query=artist:${encodeURIComponent(artistName)} AND release:${encodeURIComponent(songTitle)}&fmt=json`;
-        const response = await axios.get(queryUrl);
-
-        if (response.data["release-groups"] && response.data["release-groups"].length > 0) {
-            return response.data["release-groups"][0].id; // Devuelve el MBID del primer resultado
-        }
-
-        return null;
-    } catch (error) {
-        console.error("Error obteniendo MBID desde MusicBrainz:", error.message);
-        return null;
-    }
-};
-
-// Función para obtener la carátula del álbum desde Cover Art Archive
-const getAlbumArtFromCoverArtArchive = async (mbid) => {
-    if (!mbid) return "No disponible";
-    return `https://coverartarchive.org/release-group/${mbid}/front`;
-};
-
-// Ruta para obtener metadatos de la transmisión
+// Ruta para obtener metadatos de la transmisión, incluyendo la carátula desde CentovaCast
 app.get('/metadata', async (req, res) => {
     try {
-        const response = await axios.get('https://estructuraweb.com.co:9309/status-json.xsl');
+        const response = await axios.get('https://estructuraweb.com.co:2199/rpc/ritmo/streaminfo.get');
 
-        if (!response.data.icestats || !response.data.icestats.source) {
+        if (!response.data.data) {
             return res.status(500).json({ error: 'No se encontraron metadatos válidos' });
         }
 
-        const source = Array.isArray(response.data.icestats.source) ? response.data.icestats.source[0] : response.data.icestats.source;
+        const songData = response.data.data.song;
+        const playlistData = response.data.data.playlist;
 
-        // Extraer correctamente el artista y el título
-        const { artist, song } = extractArtistAndTitle(source.title);
-
-        // Obtener el MBID del álbum desde MusicBrainz
-        const mbid = await getMBIDFromMusicBrainz(artist, song);
-
-        // Obtener la carátula desde Cover Art Archive usando el MBID
-        const album_art = await getAlbumArtFromCoverArtArchive(mbid);
+        // Extraer artista, título y carátula
+        const artist = songData.artist || "Desconocido";
+        const songTitle = songData.title || "No disponible";
+        const albumArt = playlistData.imageurl || "No disponible"; // Obteniendo la carátula desde CentovaCast
 
         res.json({
-            server_name: source.server_name || "No disponible",
-            server_description: source.server_description || "No disponible",
-            current_song: song, // Ahora solo muestra el título sin el artista
+            server_name: response.data.data.title || "No disponible",
             artist: artist,
-            album: mbid ? song : "No disponible",
-            album_art: album_art,
-            listeners: source.listeners || 0,
-            bitrate: source.bitrate || "No disponible",
-            genre: source.genre || "No disponible",
+            current_song: songTitle,
+            album: songData.album || "No disponible",
+            album_art: albumArt,
             listen_url: "https://estructuraweb.com.co:9309/live"
         });
     } catch (error) {
